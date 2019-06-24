@@ -184,7 +184,7 @@ func (p *Processor) Marshal(msg interface{}) (rlt [][]byte, err error) {
 	}()
 	msgType := reflect.TypeOf(msg)
 	if msgType == nil || msgType.Kind() != reflect.Ptr {
-		return nil, errors.New("json message pointer required")
+		return nil, errors.New("packet message pointer required")
 	}
 	proto, data := msg.(Packet).PacketData()
 	return [][]byte{[]byte{byte(proto)}, data}, nil

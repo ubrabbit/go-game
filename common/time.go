@@ -18,10 +18,10 @@ func GetSecond() int {
 }
 
 //毫秒
-func GetMsSecond() int64 {
+func GetMsSecond() int {
 	now := time.Now()
 	//把纳秒转换成毫秒
-	return now.UnixNano() / 1000000
+	return int(now.UnixNano() / 1000000)
 }
 
 //纳秒

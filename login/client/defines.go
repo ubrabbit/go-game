@@ -13,15 +13,18 @@ type LoginPlayer struct {
 }
 
 type LoginClient struct {
-	Account     string
-	Password    string
-	agent       gate.Agent
-	authSuccess bool
-	isNew       bool
-	playerList  map[int]LoginPlayer
-	connectTime int
-	errorCode   int
-	errorMsg    string
+	id              int
+	Account         string
+	Password        string
+	agent           gate.Agent
+	helloSuccess    bool
+	identitySuccess bool
+	authSuccess     bool
+	isNew           bool
+	playerList      map[int]LoginPlayer
+	connectTime     int
+	errorCode       int
+	errorMsg        string
 }
 
 const (

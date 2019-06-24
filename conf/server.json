@@ -4,5 +4,6 @@
     "TCPAddr": "0.0.0.0:38320",
     "MaxConnNum": 40000,
     "ServerNum": 100,
-    "DatabaseAddr": "127.0.0.1:27017"
+    "DatabaseAddr": "127.0.0.1:27017",
+    "ConsolePort": 38321
 }

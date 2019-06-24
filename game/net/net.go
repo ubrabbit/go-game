@@ -2,55 +2,75 @@ package net
 
 import (
 	"errors"
-	"fmt"
 	"server/game/player"
 	"server/leaf/gate"
-	"server/leaf/network"
-	"server/leaf/network/packet"
+	loginclient "server/login/client"
+	"server/timer"
 )
 
 import (
 	. "server/common"
+	. "server/msg/protocol"
 )
 
-func getAgentClientID(a gate.Agent) int {
+func (n *NetContainer) getAgentClientID(a gate.Agent) int {
 	addr := a.RemoteAddr().String()
-	id, ok := g_Container.clients[addr]
-	//LogInfo("getAgentClientID: %s %v", addr, id)
+	c, ok := n.clients[addr]
 	if ok {
-		return id
+		return c.ID()
 	}
 	return -1
 }
 
-func (n *NetContainer) clean(a gate.Agent) {
+func (n *NetContainer) getClient(a gate.Agent) *NetClient {
 	addr := a.RemoteAddr().String()
-	id, ok := g_Container.clients[addr]
+	c, ok := n.clients[addr]
 	if ok {
-		delete(n.agents, id)
-		delete(n.players, id)
+		return c
 	}
-	delete(g_Container.clients, addr)
+	return nil
 }
 
-func (n *NetContainer) doDisconnect(a gate.Agent) {
-	id := getAgentClientID(a)
-	LogInfo("doDisconnect: %d", id)
-	n.clean(a)
-	a.Close()
+func (n *NetContainer) getClientByID(id int) *NetClient {
+	c, ok := n.clientsID[id]
+	if ok {
+		return c
+	}
+	return nil
+}
+
+func (n *NetContainer) getClientByPid(pid int) *NetClient {
+	c, ok := n.playersID[pid]
+	if ok {
+		return c
+	}
+	return nil
+}
+
+func (n *NetContainer) clean(c *NetClient) {
+	addr := c.RemoteAddr()
+	delete(n.clients, addr)
+	delete(n.clientsID, c.ID())
+	delete(n.playersID, c.PlayerID())
+	c.Delete()
+	c.Close()
+	LogDebug("clean NetClient: %s", c.Repr())
 }
 
 // 主动断开连接
-func (n *NetContainer) Disconnect(a gate.Agent) {
+func (n *NetContainer) Disconnect(c *NetClient) {
 	defer func() {
 		n.Unlock()
 		r := recover()
 		if r != nil {
-			LogError("%v OnDisconnect Error: %v", a, r)
+			LogError("%s Disconnect Error: %v", c.Repr(), r)
 		}
 	}()
 	n.Lock()
-	n.doDisconnect(a)
+
+	LogInfo("%s Disconnect", c.Repr())
+	c.OnDisconnect()
+	n.clean(c)
 }
 
 func (n *NetContainer) OnConnect(a gate.Agent) {
@@ -62,22 +82,66 @@ func (n *NetContainer) OnConnect(a gate.Agent) {
 		}
 	}()
 	n.Lock()
-	g_Container.clientIdx++
-	id := g_Container.clientIdx
-	addr := a.RemoteAddr().String()
+
+	c := newClient(a)
+	addr := c.RemoteAddr()
 	// 除非出现故障，否则不可能会出现两个相同外部地址连进来的情况。 如果真的发生，说明旧连接没处理掉，需要主动处理。
-	id2, exists := n.clients[addr]
+	c2, exists := n.clients[addr]
 	if exists {
-		a2, exists := n.agents[id2]
-		if exists {
-			LogInfo("Close Old Address: %s %d", addr, id2)
-			n.clean(a2)
-			a2.Close()
-		}
+		LogInfo("Close Old Address: %s", c2.Repr())
+		n.clean(c2)
 	}
-	LogInfo("Connect: %s %d", addr, id)
-	n.agents[id] = a
-	n.clients[addr] = id
+	id := c.ID()
+	LogInfo("%s Connect ", c.Repr())
+	n.clients[addr] = c
+	n.clientsID[id] = c
+	c.OnConnect()
+
+	f1 := NewFunctor("HelloTimeout", n.helloTimeout, c.ID())
+	f2 := NewFunctor("LoginTimeout", n.loginTimeout, c.ID())
+	timer.StartTimer(timer.TIMER_MODULE_GAME, c.ID(), "HelloTimeout", connectHelloTimeout, f1)
+	timer.StartTimer(timer.TIMER_MODULE_GAME, c.ID(), "LoginTimeout", connectLoginTimeout, f2)
+}
+
+func (n *NetContainer) helloTimeout(args ...interface{}) {
+	id := args[0].(int)
+	c := n.getClientByID(id)
+	if c == nil {
+		return
+	}
+	LogInfo("%s helloTimeout", c.Repr())
+	n.Disconnect(c)
+}
+
+func (n *NetContainer) loginTimeout(args ...interface{}) {
+	id := args[0].(int)
+	c := n.getClientByID(id)
+	if c == nil {
+		return
+	}
+	LogInfo("%s loginTimeout", c.Repr())
+	n.Disconnect(c)
+}
+
+func (n *NetContainer) OnHello(a gate.Agent, p *C2GSHello) {
+	c := n.getClient(a)
+	if c != nil {
+		timer.RemoveTimer(timer.TIMER_MODULE_GAME, c.ID(), "HelloTimeout")
+		c.PacketSend(&GS2CHello{Seed: p.Seed})
+	} else {
+		LogError("%s hello but client not exists", a.RemoteAddr().String())
+		a.Close()
+	}
+}
+
+func (n *NetContainer) OnIdentity(a gate.Agent, p *C2GSIdentity) {
+	c := n.getClient(a)
+	if c != nil {
+		c.PacketSend(&GS2CIdentity{})
+	} else {
+		LogError("%s identity but client not exists", a.RemoteAddr().String())
+		a.Close()
+	}
 }
 
 func (n *NetContainer) OnDisconnect(a gate.Agent) {
@@ -89,102 +153,107 @@ func (n *NetContainer) OnDisconnect(a gate.Agent) {
 		}
 	}()
 	n.Lock()
-	id := getAgentClientID(a)
-	pid, ok := n.players[id]
-	if ok {
-		LogInfo("Disconnect: %d(%d)", id, pid)
-		player.Logout(pid)
+
+	c := n.getClient(a)
+	if c != nil {
+		LogInfo("%s OnDisconnect", c.Repr())
+		c.OnDisconnect()
+		n.clean(c)
 	} else {
-		LogInfo("Disconnect: %d", id)
+		LogInfo("%s(-1) OnDisconnect", a.RemoteAddr().String())
 	}
-	n.clean(a)
 }
 
 // 登陆完成
-func (n *NetContainer) OnPlayerLogin(pid int, a gate.Agent) (id int) {
+func (n *NetContainer) LoginSuccess(pid int, a gate.Agent) (id int) {
 	defer func() {
 		n.Unlock()
 		r := recover()
 		if r != nil {
-			LogError("%d OnPlayerLogin error: %v", getAgentClientID(a), r)
+			LogError("%d LoginSuccess error: %v", n.getAgentClientID(a), r)
 			id = 0
 		}
 	}()
 	n.Lock()
-	id = getAgentClientID(a)
-	_, ok := n.agents[id]
-	if !ok {
-		LogPanic("%d OnPlayerLogin, but agent not exists in clients!", pid)
+
+	c := n.getClient(a)
+	if c == nil {
+		LogPanic("%d LoginSuccess, but agent not exists in clients!", pid)
 	}
-	pid2, ok := n.players[id]
-	//同一个连接加载了不同的角色，就顶前一个角色下线
-	if ok && pid != pid2 {
-		player.Logout(pid2)
+	c2 := n.getClientByPid(pid)
+	//顶掉旧的客户端
+	if c2 != nil && c2.ID() != c.ID() {
+		LogInfo("Close Old Client: %s", c2.Repr())
+		n.clean(c2)
 	}
-	n.players[id] = pid
-	return id
+	timer.RemoveTimer(timer.TIMER_MODULE_GAME, c.ID(), "HelloTimeout")
+	timer.RemoveTimer(timer.TIMER_MODULE_GAME, c.ID(), "LoginTimeout")
+	c.LoginSuccess(pid)
+	return c.ID()
 }
 
+//网络连接入口
 func RpcNewAgent(args []interface{}) {
 	a := args[0].(gate.Agent)
 	g_Container.OnConnect(a)
+	err := loginclient.OnClientConnect(a)
+	if err != nil {
+		LogError("OnConnect error: %v", err)
+		g_Container.OnDisconnect(a)
+		loginclient.OnClientDisconnect(a)
+	}
 }
 
+//网络断开连接入口
 func RpcCloseAgent(args []interface{}) {
 	a := args[0].(gate.Agent)
 	g_Container.OnDisconnect(a)
+	loginclient.OnClientDisconnect(a)
+}
+
+func OnHello(a gate.Agent, p *C2GSHello) {
+	g_Container.OnHello(a, p)
+	loginclient.OnHello(a)
+}
+
+func OnIdentity(a gate.Agent, p *C2GSIdentity) {
+	g_Container.OnIdentity(a, p)
+	loginclient.OnIdentity(a)
 }
 
 func LoginSuccess(pid int, a gate.Agent) int {
-	LogInfo("LoginSuccess: %d", pid)
-	return g_Container.OnPlayerLogin(pid, a)
-}
-
-func PacketSend(id int, proto uint8, msgData []byte) (err error) {
-	defer func() {
-		r := recover()
-		if r != nil {
-			err = r.(error)
-		}
-	}()
-
-	g_Container.Lock()
-	agent, ok := g_Container.agents[id]
-	g_Container.Unlock()
-	if !ok {
-		return errors.New(fmt.Sprintf("client %d has no agent!", id))
-	}
-	msg := network.PacketProto(proto, msgData)
-	agent.WriteMsg(msg)
-	return nil
+	return g_Container.LoginSuccess(pid, a)
 }
 
 func SendToPlayer(p *player.Player, i interface{}) (err error) {
 	defer func() {
+		g_Container.Unlock()
 		r := recover()
 		if r != nil {
 			err = r.(error)
 		}
 	}()
+	g_Container.Lock()
+
 	if p == nil {
 		return errors.New("SendToPlayer but player is nil")
 	}
 	clientID := p.GetClientID()
-	if p.GetClientID() <= 0 {
-		return errors.New(fmt.Sprintf("player %d has no clientID: %d", p.Pid, clientID))
+	c := g_Container.getClientByID(clientID)
+	if c == nil {
+		return errors.New(FormatString("SendToPlayer %d but client not exists, clientID: %d", p.Pid, clientID))
 	}
-	proto, msgData := i.(packet.Packet).PacketData()
-	err = PacketSend(clientID, proto, msgData)
+
+	err = c.PacketSend(i)
 	if err != nil {
-		return errors.New(fmt.Sprintf("SendToPlayer %d %d error: %v", p.Pid, proto, err))
+		return errors.New(FormatString("SendToPlayer %d %v error: %v", p.Pid, i, err))
 	}
 	return nil
 }
 
 func init() {
 	g_Container = new(NetContainer)
-	g_Container.clientIdx = 1000
-	g_Container.clients = make(map[string]int, 0)
-	g_Container.agents = make(map[int]gate.Agent, 0)
-	g_Container.players = make(map[int]int, 0)
+	g_Container.clients = make(map[string]*NetClient, 0)
+	g_Container.clientsID = make(map[int]*NetClient, 0)
+	g_Container.playersID = make(map[int]*NetClient, 0)
 }

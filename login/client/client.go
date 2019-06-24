@@ -5,11 +5,32 @@ import (
 	db "server/db/mongodb"
 	"server/db/table"
 	"server/leaf/gate"
+	"server/timer"
 )
 
 import (
 	. "server/common"
 )
+
+func (c *LoginClient) ID() int {
+	return c.id
+}
+
+func (c *LoginClient) Create() {
+	timer.AddObject(c.ID())
+}
+
+func (c *LoginClient) Delete() {
+	timer.RemoveObject(c.ID())
+}
+
+func (c *LoginClient) Repr() string {
+	return FormatString("%s(%d)", c.RemoteAddr(), c.ID())
+}
+
+func (c *LoginClient) RemoteAddr() string {
+	return c.agent.RemoteAddr().String()
+}
 
 func (c *LoginClient) IsLogin() bool {
 	return c.authSuccess
@@ -47,7 +68,18 @@ func (c *LoginClient) ValidPlayerEnter(pid int) bool {
 	return true
 }
 
-func ClientHello(agent gate.Agent) {}
+func (c *LoginClient) loginTimeout(args ...interface{}) {
+	defer func() {
+		g_Lock.Unlock()
+		r := recover()
+		if r != nil {
+			LogError("LoginClient %s timeout err: %v", c.Repr(), r)
+		}
+	}()
+	g_Lock.Lock()
+
+	cleanClient(c)
+}
 
 func createPlayer(acct string) int {
 	c := db.GetServerC(table.DBNamePlayer)
@@ -68,27 +100,43 @@ func createPlayer(acct string) int {
 	return pid
 }
 
+func OnHello(agent gate.Agent) {
+	client := GetLoginClient(agent.RemoteAddr().String())
+	if client == nil {
+		return
+	}
+	client.helloSuccess = true
+}
+
+func OnIdentity(agent gate.Agent) {
+	client := GetLoginClient(agent.RemoteAddr().String())
+	if client == nil {
+		return
+	}
+	client.identitySuccess = true
+}
+
 //这个函数禁止加锁
 func ClientLogin(acct string, pwd string, agent gate.Agent) *LoginClient {
-	//创建连接对象
-	client := LoginClient{
-		Account:     acct,
-		Password:    pwd,
-		agent:       agent,
-		authSuccess: false,
-		isNew:       false,
-		connectTime: GetSecond(),
-	}
-	client.authSuccess = false
-	client.playerList = make(map[int]LoginPlayer, 0)
-	err := OnClientConnect(&client)
-	if err != nil {
+	client := GetLoginClient(agent.RemoteAddr().String())
+	if client == nil {
 		return nil
 	}
+	if !client.helloSuccess {
+		LogError("%s try login but hello failed", client.Repr())
+		return nil
+	}
+	if !client.identitySuccess {
+		LogError("%s try login but identity failed", client.Repr())
+		return nil
+	}
+	//符合登陆请求时才从堆中分配玩家列表容器
+	client.playerList = make(map[int]LoginPlayer, 0)
+
 	item := table.DBTableAccount{}
 	c := db.GetServerC(table.DBNameAccount)
 	c2 := db.GetServerC(table.DBNamePlayer)
-	err = c.Find(bson.M{"account": acct}).One(&item)
+	err := c.Find(bson.M{"account": acct}).One(&item)
 	if err == db.ErrNotFound { //注册
 		client.isNew = true
 
@@ -160,30 +208,16 @@ func ClientLogin(acct string, pwd string, agent gate.Agent) *LoginClient {
 		return nil
 	}
 	LogDebug("ClientLogin: %s %v", acct, client.playerList)
-	return &client
+	return client
 }
 
-//每隔一段时间在新连接时触发。不使用定时器处理，因为用锁复杂度太高！
-func cleanOldClients() {
-	defer func() {
-		r := recover()
-		if r != nil {
-			LogError("CleanOldClients error: %v", r)
-		}
-	}()
-	now := GetSecond()
-	if now-g_LastCleanTime <= constCleanInternal {
-		return
-	}
-	g_LastCleanTime = now
-	for addr, obj := range g_LoginClientList {
-		if now-obj.connectTime >= constClientAlive {
-			delete(g_LoginClientList, addr)
-		}
-	}
+func cleanClient(c *LoginClient) {
+	LogDebug("clean LoginClient: %s", c.Repr())
+	c.Delete()
+	delete(g_LoginClientList, c.RemoteAddr())
 }
 
-func OnClientConnect(c *LoginClient) (err error) {
+func OnClientConnect(agent gate.Agent) (err error) {
 	defer func() {
 		g_Lock.Unlock()
 		r := recover()
@@ -193,9 +227,40 @@ func OnClientConnect(c *LoginClient) (err error) {
 	}()
 	g_Lock.Lock()
 
-	addr := c.agent.RemoteAddr().String()
-	g_LoginClientList[addr] = c
-	cleanOldClients()
+	//创建连接对象
+	c := &LoginClient{
+		id:              NewObjectID(),
+		Account:         "",
+		Password:        "",
+		agent:           agent,
+		isNew:           false,
+		connectTime:     GetSecond(),
+		helloSuccess:    false,
+		identitySuccess: false,
+		authSuccess:     false,
+	}
+	g_LoginClientList[c.RemoteAddr()] = c
+	c.Create()
+	f := NewFunctor("LoginTimeout", c.loginTimeout)
+	timer.StartTimer(timer.TIMER_MODULE_LOGIN, c.ID(), "LoginTimeout", constClientAlive, f)
+	return nil
+}
+
+func OnClientDisconnect(agent gate.Agent) (err error) {
+	defer func() {
+		g_Lock.Unlock()
+		r := recover()
+		if r != nil {
+			err = r.(error)
+		}
+	}()
+	g_Lock.Lock()
+
+	addr := agent.RemoteAddr().String()
+	c, ok := g_LoginClientList[addr]
+	if ok {
+		cleanClient(c)
+	}
 	return nil
 }
 

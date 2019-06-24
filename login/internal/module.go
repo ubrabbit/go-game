@@ -1,8 +1,8 @@
 package internal
 
 import (
-	"server/leaf/module"
 	"server/base"
+	"server/leaf/module"
 )
 
 var (

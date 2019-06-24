@@ -41,4 +41,5 @@ func main() {
 	PacketSendContentLonger()
 	PacketSendContentTooLarge()
 	PacketSendOnlyProtocol()
+	PacketOnlyConnect(5, 100)
 }

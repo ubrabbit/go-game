@@ -47,6 +47,54 @@ func (c *LoginClient) Login(user string, password string) int {
 	return pid
 }
 
+//未按流程发包的登陆，会被服务器直接断线
+func (c *LoginClient) LoginNoHello(user string, password string) int {
+	defer func() {
+		r := recover()
+		if r != nil {
+			err := r.(error)
+			if err.Error() != "EOF" {
+				LogFatal("LoginNoHello Fail!: %v", err)
+			}
+		}
+	}()
+	c.C2GSIdentity()
+	c.GS2CIdentity()
+	c.C2GSLogin(user, password)
+	pid := c.GS2CLogin()
+	c.C2GSLoadRole(pid)
+	name := c.GS2LoadRole()
+	if user != name {
+		LogPanic("GS2LoadRole Failure, '%s' != '%s'", user, name)
+	}
+	c.GS2CLoginFinished()
+	return pid
+}
+
+//未按流程发包的登陆，会被服务器直接断线
+func (c *LoginClient) LoginNoIdentity(user string, password string) int {
+	defer func() {
+		r := recover()
+		if r != nil {
+			err := r.(error)
+			if err.Error() != "EOF" {
+				LogFatal("LoginNoIdentity Fail!: %v", err)
+			}
+		}
+	}()
+	c.C2GSHelo()
+	c.GS2CHelo()
+	c.C2GSLogin(user, password)
+	pid := c.GS2CLogin()
+	c.C2GSLoadRole(pid)
+	name := c.GS2LoadRole()
+	if user != name {
+		LogPanic("GS2LoadRole Failure, '%s' != '%s'", user, name)
+	}
+	c.GS2CLoginFinished()
+	return pid
+}
+
 func (c *LoginClient) C2GSHelo() {
 	p := &C2GSHello{
 		Seed: helloSeed,

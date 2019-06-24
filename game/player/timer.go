@@ -24,11 +24,11 @@ func (p *Player) Delete() {
 	timer.RemoveObject(p.ID())
 }
 
-func (p *Player) StartTimer(key string, timeout int, f Functor) {
+func (p *Player) StartTimer(key string, timeout int, f *Functor) {
 	timer.StartTimer(timer.TIMER_MODULE_GAME, p.ID(), key, timeout, f)
 }
 
-func (p *Player) StartTimerMs(key string, timeout int, f Functor) {
+func (p *Player) StartTimerMs(key string, timeout int, f *Functor) {
 	timer.StartTimerMs(timer.TIMER_MODULE_GAME, p.ID(), key, timeout, f)
 }
 

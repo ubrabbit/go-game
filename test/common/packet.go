@@ -2,7 +2,10 @@ package common
 
 import (
 	"encoding/binary"
+	"math"
+	"net"
 	"strings"
+	"time"
 )
 import (
 	. "server/common"
@@ -13,6 +16,7 @@ import (
 const (
 	packetHeaderSize    = 3
 	debugShowPacketSize = 32
+	constSyncfloodCount = 10000
 )
 
 func debugPrint(s string, b []byte) {
@@ -97,6 +101,9 @@ func (c *Client) PacketSendContentTooLarge() {
 	msg[0] = byte(TEST_ECHO)
 	//写入长度
 	packetSize := len(str)
+	if packetSize > math.MaxUint16 {
+		packetSize = math.MaxUint16
+	}
 	if LittleEndian {
 		binary.LittleEndian.PutUint16(msg[1:], uint16(packetSize))
 	} else {
@@ -120,4 +127,36 @@ func (c *Client) PacketSendOnlyProtocol() {
 	copy(msg[packetHeaderSize:], msgData)
 	debugPrint("PacketSendOnlyProtocol", msg)
 	c.Conn.Write(msg)
+}
+
+//除了发起连接什么都不干
+func PacketOnlyConnect(timeout int, count int) {
+	for i := 0; i < count; i++ {
+		go func() (err error) {
+			defer func() {
+				r := recover()
+				if r != nil {
+					err = r.(error)
+				}
+			}()
+			conn, err := net.Dial("tcp", SERVER_ADDR)
+			if err != nil {
+				return err
+			}
+			time.Sleep(time.Duration(timeout-10) * time.Second)
+
+			msgData := make([]byte, 0)
+			msg := make([]byte, packetHeaderSize)
+			msg[0] = byte(TEST_ECHO)
+			if LittleEndian {
+				binary.LittleEndian.PutUint16(msg[1:], uint16(0))
+			} else {
+				binary.BigEndian.PutUint16(msg[1:], uint16(0))
+			}
+			copy(msg[packetHeaderSize:], msgData)
+			conn.Write(msg)
+			return nil
+		}()
+	}
+	time.Sleep(time.Duration(timeout) * time.Second)
 }

@@ -1,6 +1,8 @@
 package common
 
 import (
+	"bytes"
+	"math"
 	"net"
 	"sync"
 )
@@ -21,7 +23,7 @@ type Client struct {
 
 func NewClient() *Client {
 	client := new(Client)
-	conn, err := net.Dial("tcp", "127.0.0.1:38320")
+	conn, err := net.Dial("tcp", SERVER_ADDR)
 	if err != nil {
 		LogPanic("NewClient: %v", err)
 	}
@@ -65,4 +67,38 @@ func (c *Client) GS2CEcho() {
 	if err != nil {
 		LogInfo("GS2CEcho err: %d : %v %v\n", proto, p, err)
 	}
+}
+
+func (c *Client) TestEcho(clientCount int, loopCount int) {
+	wg := new(sync.WaitGroup)
+	wg.Add(clientCount)
+	ch := make(chan int, clientCount)
+	go func() {
+		for i := 0; i < clientCount; i++ {
+			ch <- i
+		}
+	}()
+	for i := 0; i < clientCount; i++ {
+		go func() {
+			k := <-ch
+			str := FormatString("string_%d", k)
+			b := bytes.NewBufferString(FormatString("bytes_%d", k)).Bytes()
+			c := NewClient()
+			for j := 0; j < loopCount; j++ {
+				v1, v2, v3, v4, v5, v6 := k, k+1, k*2, k*4, str, b
+				v1 = v1 % math.MaxUint8
+				v2 = v2 % math.MaxUint16
+				c.C2GSEcho(v1, v2, v3, v4, v5, v6)
+				p0 := c.Protocol.(*TestEcho)
+				c.GS2CEcho()
+				p := c.Protocol.(*TestEcho)
+				if (p.Int1 != v1) || (p.Int2 != v2) || (p.Int3 != v3) || (p.Int4 != v4) || (p.Str != v5) || (string(p.Byte) != string(v6)) {
+					LogPanic("TestClientEcho Fail! p: %v p0: %v", p, p0)
+				}
+				//LogInfo("%d(%d) response success", k, j)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }

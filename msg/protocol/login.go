@@ -112,14 +112,19 @@ func (p *C2GSLogin) Protocol() uint8 {
 
 func (p *C2GSLogin) PacketData() (uint8, []byte) {
 	data := make([]byte, 0)
-	data = PacketString(data, p.User, 32)
-	data = PacketString(data, p.Password, 32)
+	nLen, pLen := len(p.User), len(p.Password)
+	data = PacketInt(data, nLen, 1)
+	data = PacketString(data, p.User, nLen)
+	data = PacketInt(data, pLen, 1)
+	data = PacketString(data, p.Password, pLen)
 	return p.Protocol(), data
 }
 
 func (p *C2GSLogin) UnpackData(from []byte) {
-	user, from := UnpackString(from, 32)
-	password, from := UnpackString(from, 32)
+	nLen, from := UnpackInt(from, 1)
+	user, from := UnpackString(from, nLen)
+	pLen, from := UnpackInt(from, 1)
+	password, from := UnpackString(from, pLen)
 	p.User = user
 	p.Password = password
 }

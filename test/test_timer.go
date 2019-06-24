@@ -8,7 +8,8 @@ import (
 var testSecondList = []int{1, 1, 2, 3, 3, 5}
 
 func main() {
-	TestTimerWithChannel(testSecondList)
-	TestTimerNoChannel(testSecondList)
+	//TestTimerWithChannel(testSecondList)
+	//TestTimerNoChannel(testSecondList)
+	TestTimerGoroutineSafe()
 	LogInfo("test success!")
 }

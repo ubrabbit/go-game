@@ -2,6 +2,7 @@ package internal
 
 import (
 	"server/base"
+	"server/game/world"
 	"server/leaf/module"
 )
 
@@ -16,6 +17,8 @@ type Module struct {
 
 func (m *Module) OnInit() {
 	m.Skeleton = skeleton
+
+	world.InitWorld()
 }
 
 func (m *Module) OnDestroy() {

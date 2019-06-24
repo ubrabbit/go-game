@@ -12,6 +12,18 @@ import (
 	. "server/common"
 )
 
+func HandleC2GSHello(i interface{}, agent gate.Agent) {
+	m := i.(*protocol.C2GSHello)
+	LogDebug("C2GSHello %v", m.Seed)
+	net.OnHello(agent, m)
+}
+
+func HandleC2GSIdentity(i interface{}, agent gate.Agent) {
+	m := i.(*protocol.C2GSIdentity)
+	LogDebug("C2GSIdentity %v", m.Identity)
+	net.OnIdentity(agent, m)
+}
+
 func HandleC2GSLoadRole(i interface{}, agent gate.Agent) {
 	m := i.(*protocol.C2GSLoadRole)
 	pid := m.Pid

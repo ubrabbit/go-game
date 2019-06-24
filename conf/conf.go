@@ -10,13 +10,13 @@ var (
 	LogFlag = log.LstdFlags
 
 	// gate conf
-	PendingWriteNum        = 4096
+	PendingWriteNum        = 8192
 	MaxMsgLen       uint32 = 40960
 	HTTPTimeout            = 10 * time.Second
 	LenMsgLen              = 2
 
 	// skeleton conf
-	GoLen              = 10000
+	GoLen              = 20480
 	TimerDispatcherLen = 10000
 	AsynCallLen        = 10000
 	ChanRPCLen         = 10000

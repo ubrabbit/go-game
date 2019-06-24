@@ -5,12 +5,23 @@ import (
 	"sync"
 )
 
+type NetClient struct {
+	sync.Mutex
+	id       int
+	agent    gate.Agent
+	playerID int
+}
+
 type NetContainer struct {
 	sync.Mutex
-	clientIdx int
-	clients   map[string]int
-	agents    map[int]gate.Agent
-	players   map[int]int
+	clients   map[string]*NetClient
+	clientsID map[int]*NetClient
+	playersID map[int]*NetClient
 }
+
+const (
+	connectHelloTimeout = 10
+	connectLoginTimeout = 600
+)
 
 var g_Container *NetContainer

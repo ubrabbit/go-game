@@ -10,7 +10,7 @@ type FuncInterface interface {
 	Call(arg ...interface{})
 }
 
-func (f Functor) Call(args ...interface{}) {
+func (f *Functor) Call(args ...interface{}) {
 	defer func() {
 		err := recover()
 		if err != nil {
@@ -21,6 +21,9 @@ func (f Functor) Call(args ...interface{}) {
 	f.callfunc(append(f.Args, args...)...)
 }
 
-func NewFunctor(name string, f func(...interface{}), args ...interface{}) Functor {
-	return Functor{name, args, f}
+func NewFunctor(name string, f func(...interface{}), args ...interface{}) *Functor {
+	return &Functor{
+		Name:     name,
+		Args:     args,
+		callfunc: f}
 }

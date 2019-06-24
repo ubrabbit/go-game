@@ -83,11 +83,15 @@ func NewPlayerID() int {
 		Upsert:    true,
 		ReturnNew: true,
 	}
-	playerID := table.DBTableGlobal{}
-	if _, err := c.Find(bson.M{"name": "MaxPlayerID"}).Apply(change, &playerID); err != nil {
+	item := table.DBTableGlobal{}
+	if _, err := c.Find(bson.M{"name": "MaxPlayerID"}).Apply(change, &item); err != nil {
 		LogPanic("NewPlayerID failed: %v", err)
 	}
-	return playerID.Value.(int)
+	pid := item.Value.(int)
+	if pid > PlayerIDMax {
+		LogPanic("PlayerID %d exceed max: %d", pid, PlayerIDMax)
+	}
+	return pid
 }
 
 func NewUUID() bson.ObjectId {

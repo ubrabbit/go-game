@@ -21,7 +21,7 @@ func AddObject(id int) {
 		obj := &TimerObject{
 			ID: id,
 		}
-		obj.timerList = make(map[string][]*TimerItem, 0)
+		obj.timerList = make(map[string]*TimerItem, 0)
 		g_Container[id] = obj
 	}
 }
@@ -49,33 +49,34 @@ func RemoveObject(id int) bool {
 	if !ok {
 		return false
 	}
-	for _, list := range c.timerList {
-		for _, i := range list {
-			i.Stop()
-		}
+	for _, i := range c.timerList {
+		i.Stop()
 	}
 	delete(g_Container, id)
 	return true
 }
 
-func startTimer(mod *TimerModule, c *TimerObject, key string, timeout int, f Functor) {
+func startTimer(mod *TimerModule, c *TimerObject, key string, timeout int, f *Functor) {
 	defer c.Unlock()
 	c.Lock()
-	_, ok := c.timerList[key]
-	if !ok {
-		c.timerList[key] = make([]*TimerItem, 0)
+	i2, ok := c.timerList[key]
+	//旧定时器被顶掉了
+	if ok {
+		i2.Stop()
 	}
 	i := &TimerItem{
+		ID:       NewObjectID(),
 		Key:      key,
 		event:    mod.event,
 		chanRPC:  mod.chanRPC,
 		callback: f,
+		stopped:  false,
 	}
-	i.timer = mod.wheel.AfterFunc(time.Duration(timeout)*time.Millisecond, i.Callback)
-	c.timerList[key] = append(c.timerList[key], i)
+	i.timer = mod.wheel.AfterFunc(time.Duration(timeout)*time.Millisecond, i.TimerCallback)
+	c.timerList[key] = i
 }
 
-func StartTimer(name string, id int, key string, timeout int, f Functor) {
+func StartTimer(name string, id int, key string, timeout int, f *Functor) {
 	c := GetObject(id)
 	if c == nil {
 		return
@@ -87,7 +88,7 @@ func StartTimer(name string, id int, key string, timeout int, f Functor) {
 	startTimer(mod, c, key, timeout*1000, f)
 }
 
-func StartTimerMs(name string, id int, key string, timeout int, f Functor) {
+func StartTimerMs(name string, id int, key string, timeout int, f *Functor) {
 	c := GetObject(id)
 	if c == nil {
 		return
@@ -107,13 +108,11 @@ func RemoveTimer(name string, id int, key string) bool {
 
 	defer c.Unlock()
 	c.Lock()
-	_, ok := c.timerList[key]
+	i, ok := c.timerList[key]
 	if !ok {
 		return false
 	}
-	for _, i := range c.timerList[key] {
-		i.Stop()
-	}
+	i.Stop()
 	delete(c.timerList, key)
 	return true
 }
@@ -127,7 +126,7 @@ func getModule(name string) *TimerModule {
 	return nil
 }
 
-func RegistModule(name string, event string, ch *chanrpc.Server) {
+func RegistModule(name string, ch *chanrpc.Server) {
 	defer func() {
 		g_Lock.Unlock()
 		r := recover()
@@ -142,14 +141,13 @@ func RegistModule(name string, event string, ch *chanrpc.Server) {
 		LogFatal("timer module %s has regist before!", name)
 	}
 	g_Module[name] = &TimerModule{
-		Name:    name,
-		event:   event,
+		event:   name,
 		wheel:   wheel.NewTimingWheel(time.Millisecond, timerQueueDefaultLen),
 		chanRPC: ch,
 	}
 	tw := g_Module[name].wheel
 	go tw.Start()
-	LogInfo("RegistModule %s(%s)", name, event)
+	LogInfo("RegistModule %s", name)
 }
 
 func init() {

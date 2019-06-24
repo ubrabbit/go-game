@@ -10,7 +10,7 @@ mongodb的文档定义说明
 */
 
 const (
-	sessionNum  = 64
+	sessionNum  = 128
 	minPlayerID = 10000
 	/*
 		BSON大小限制。这个暂时也不知道怎么用，先写在代码里用于给自己提醒。

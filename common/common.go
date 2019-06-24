@@ -30,7 +30,7 @@ func IsPlayerID(id int) bool {
 }
 
 func init() {
-	g_ObjectIDChan = make(chan int, 32)
+	g_ObjectIDChan = make(chan int, 256)
 	go func() {
 		objectID := ObjectIDMin
 		for {

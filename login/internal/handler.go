@@ -35,13 +35,14 @@ func handleCommand(args []interface{}) {
 
 var g_CommandList map[int]func(interface{}, gate.Agent)
 
+func setHandler(i interface{}, f func(interface{}, gate.Agent)) {
+	proto := int(i.(packet.Packet).Protocol())
+	g_CommandList[proto] = f
+	handler(i, handleCommand)
+}
+
 func init() {
 	g_CommandList = make(map[int]func(interface{}, gate.Agent), 0)
-	g_CommandList[protocol.C2GS_HELLO] = command.HandleC2GSHello
-	g_CommandList[protocol.C2GS_IDENTIFY] = command.HandleC2GSIdentity
-	g_CommandList[protocol.C2GS_LOGIN] = command.HandleC2GSLogin
 
-	handler(&protocol.C2GSHello{}, handleCommand)
-	handler(&protocol.C2GSIdentity{}, handleCommand)
-	handler(&protocol.C2GSLogin{}, handleCommand)
+	setHandler(&protocol.C2GSLogin{}, command.HandleC2GSLogin)
 }

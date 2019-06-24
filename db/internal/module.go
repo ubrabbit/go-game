@@ -26,3 +26,6 @@ func (m *Module) OnInit() {
 func (m *Module) OnDestroy() {
 	saveobject.SaveAll()
 }
+
+func init() {
+}

@@ -115,7 +115,7 @@ func (p *Player) IsUpdate() bool {
 
 func (p *Player) Save() {
 	defer func() {
-		defer p.dbLock.Unlock()
+		p.dbLock.Unlock()
 		r := recover()
 		if r != nil {
 			LogError("%s Save error: %v", p.Repr(), r)
@@ -127,7 +127,7 @@ func (p *Player) Save() {
 
 func (p *Player) Load() {
 	defer func() {
-		defer p.dbLock.Unlock()
+		p.dbLock.Unlock()
 		r := recover()
 		if r != nil {
 			LogError("%s Load error: %v", p.Repr(), r)
