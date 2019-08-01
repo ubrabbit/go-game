@@ -44,8 +44,6 @@ func setHandler(i interface{}, f func(interface{}, gate.Agent)) {
 func init() {
 	g_CommandList = make(map[int]func(interface{}, gate.Agent), 0)
 
-	setHandler(&C2GSHello{}, command.HandleC2GSHello)
-	setHandler(&C2GSIdentity{}, command.HandleC2GSIdentity)
 	setHandler(&C2GSLoadRole{}, command.HandleC2GSLoadRole)
 	setHandler(&C2GSLoginFinished{}, command.HandleC2GSLoginFinished)
 	setHandler(&TestEcho{}, command.HandleTestEcho)

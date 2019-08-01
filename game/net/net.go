@@ -97,9 +97,7 @@ func (n *NetContainer) OnConnect(a gate.Agent) {
 	n.clientsID[id] = c
 	c.OnConnect()
 
-	f1 := NewFunctor("HelloTimeout", n.helloTimeout, c.ID())
 	f2 := NewFunctor("LoginTimeout", n.loginTimeout, c.ID())
-	timer.StartTimer(timer.TIMER_MODULE_GAME, c.ID(), "HelloTimeout", connectHelloTimeout, f1)
 	timer.StartTimer(timer.TIMER_MODULE_GAME, c.ID(), "LoginTimeout", connectLoginTimeout, f2)
 }
 
@@ -123,24 +121,15 @@ func (n *NetContainer) loginTimeout(args ...interface{}) {
 	n.Disconnect(c)
 }
 
-func (n *NetContainer) OnHello(a gate.Agent, p *C2GSHello) {
+func (n *NetContainer) OnHello(a gate.Agent) {
 	c := n.getClient(a)
 	if c != nil {
-		timer.RemoveTimer(timer.TIMER_MODULE_GAME, c.ID(), "HelloTimeout")
-		c.PacketSend(&GS2CHello{Seed: p.Seed})
+		f1 := NewFunctor("HelloTimeout", n.helloTimeout, c.ID())
+		timer.StartTimer(timer.TIMER_MODULE_GAME, c.ID(), "HelloTimeout", connectHelloTimeout, f1)
+		c.PacketSend(&GS2CHello{Seed: 1234567890})
 	} else {
 		LogError("%s hello but client not exists", a.RemoteAddr().String())
-		a.Close()
-	}
-}
-
-func (n *NetContainer) OnIdentity(a gate.Agent, p *C2GSIdentity) {
-	c := n.getClient(a)
-	if c != nil {
-		c.PacketSend(&GS2CIdentity{})
-	} else {
-		LogError("%s identity but client not exists", a.RemoteAddr().String())
-		a.Close()
+		a.Destroy()
 	}
 }
 
@@ -201,6 +190,9 @@ func RpcNewAgent(args []interface{}) {
 		LogError("OnConnect error: %v", err)
 		g_Container.OnDisconnect(a)
 		loginclient.OnClientDisconnect(a)
+	} else {
+		g_Container.OnHello(a)
+		loginclient.OnHello(a)
 	}
 }
 
@@ -209,16 +201,6 @@ func RpcCloseAgent(args []interface{}) {
 	a := args[0].(gate.Agent)
 	g_Container.OnDisconnect(a)
 	loginclient.OnClientDisconnect(a)
-}
-
-func OnHello(a gate.Agent, p *C2GSHello) {
-	g_Container.OnHello(a, p)
-	loginclient.OnHello(a)
-}
-
-func OnIdentity(a gate.Agent, p *C2GSIdentity) {
-	g_Container.OnIdentity(a, p)
-	loginclient.OnIdentity(a)
 }
 
 func LoginSuccess(pid int, a gate.Agent) int {

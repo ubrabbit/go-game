@@ -30,8 +30,8 @@ func TestLoginOldAccount(t *testing.T) {
 		"xyc":    "xyc",
 		"lpx":    "lpx",
 	}
-	c := NewLoginClient()
 	for user, password := range loginUsers {
+		c := NewLoginClient()
 		pid := c.Login(user, password)
 		LogInfo("%s(%s) login success! pid=%d", user, password, pid)
 	}

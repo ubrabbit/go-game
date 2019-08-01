@@ -32,7 +32,6 @@ func (c *LoginClient) PacketSend(p packet.Packet) {
 }
 
 func (c *LoginClient) Login(user string, password string) int {
-	c.C2GSHelo()
 	c.GS2CHelo()
 	c.C2GSIdentity()
 	c.GS2CIdentity()
@@ -86,6 +85,49 @@ func (c *LoginClient) LoginNoIdentity(user string, password string) int {
 	c.GS2CHelo()
 	c.C2GSLogin(user, password)
 	pid := c.GS2CLogin()
+	c.C2GSLoadRole(pid)
+	name := c.GS2LoadRole()
+	if user != name {
+		LogPanic("GS2LoadRole Failure, '%s' != '%s'", user, name)
+	}
+	c.GS2CLoginFinished()
+	return pid
+}
+
+//未按流程发包的登陆，会被服务器直接断线
+func (c *LoginClient) LoginNoVerify(user string, password string) int {
+	defer func() {
+		r := recover()
+		if r != nil {
+			err := r.(error)
+			if err.Error() != "EOF" {
+				LogFatal("LoginNoVerify Fail!: %v", err)
+			}
+		}
+	}()
+	c.C2GSLogin(user, password)
+	pid := c.GS2CLogin()
+	c.C2GSLoadRole(pid)
+	name := c.GS2LoadRole()
+	if user != name {
+		LogPanic("GS2LoadRole Failure, '%s' != '%s'", user, name)
+	}
+	c.GS2CLoginFinished()
+	return pid
+}
+
+//未按流程发包的登陆，会被服务器直接断线
+func (c *LoginClient) LoginNoAuth(user string, password string) int {
+	defer func() {
+		r := recover()
+		if r != nil {
+			err := r.(error)
+			if err.Error() != "EOF" {
+				LogFatal("LoginNoAuth Fail!: %v", err)
+			}
+		}
+	}()
+	pid := 10002
 	c.C2GSLoadRole(pid)
 	name := c.GS2LoadRole()
 	if user != name {

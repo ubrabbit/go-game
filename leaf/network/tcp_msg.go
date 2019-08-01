@@ -165,6 +165,13 @@ func (p *MsgParser) Write(conn *TCPConn, args ...[]byte) error {
 // goroutine safe
 // 压解包模式下，包实际头部长度要比定义的包长度多1（在最开始，用于封装协议号或者其他）。
 func (p *MsgParser) ReadPacket(conn *TCPConn) ([]byte, error) {
+	/**
+	 * @brief The ProtocolFormat struct
+	 * [数据协议 1b][整个数据包的长度 2b][ 包数据 ]
+	 * 例如： 协议0x1, 包数据是"HelloWorld!", 长度就是 11个字节+ 1个字节协议， 包长度是12
+	 * [0x1][12]["HelloWorld!"]
+	 * [1b][2b][11b] = 总共14b
+	 */
 	headerSize := p.lenMsgLen + 1
 	bufMsgLen := make([]byte, headerSize)
 	// read len
@@ -174,31 +181,39 @@ func (p *MsgParser) ReadPacket(conn *TCPConn) ([]byte, error) {
 	}
 	var dataLen uint16 = 0
 	bufDataLen := bytes.NewBuffer(bufMsgLen[1:])
-	//fmt.Printf("littleEndian: %v bufDataLen000: %x  dataLen: %d\n", LittleEndian, bufDataLen, dataLen)
+	//fmt.Printf("lenMsgLen: %d littleEndian: %v bufDataLen000: %x  dataLen: %d\n", p.lenMsgLen, LittleEndian, bufDataLen, dataLen)
 	if LittleEndian {
 		err = binary.Read(bufDataLen, binary.LittleEndian, &dataLen)
 	} else {
 		err = binary.Read(bufDataLen, binary.BigEndian, &dataLen)
 	}
-	//fmt.Printf("bufDataLen: %x  dataLen: %d err: %v\n", bufDataLen, dataLen, err)
-	if err != nil {
-		return nil, err
+	//fmt.Printf("bufDataLen: %x  len(bufDataLen): %d dataLen: %d err: %v\n", bufDataLen, len(bufDataLen.Bytes()), dataLen, err)
+	if err != nil || dataLen <= 0 {
+		return nil, errors.New("message too short")
 	}
 	if uint32(dataLen) > p.maxMsgLen {
 		return nil, errors.New("message too long")
 	}
 	// data
-	msgData := make([]byte, uint32(dataLen)+1)
+	msgData := make([]byte, uint32(dataLen))
 	// proto
 	copy(msgData[:1], bufMsgLen[:1])
 	if _, err := io.ReadFull(conn, msgData[1:]); err != nil {
 		return nil, err
 	}
+	//fmt.Printf("ReadPacket: %x", msgData)
 	return msgData, nil
 }
 
 // goroutine safe
 func (p *MsgParser) WritePacket(conn *TCPConn, args ...[]byte) error {
+	/**
+	 * @brief The ProtocolFormat struct
+	 * [数据协议 1b][整个数据包的长度 2b][ 包数据 ]
+	 * 例如： 协议0x1, 包数据是"HelloWorld!", 长度就是 11个字节+ 1个字节协议， 包长度是12
+	 * [0x1][12]["HelloWorld!"]
+	 * [1b][2b][11b] = 总共14b
+	 */
 	var msgLen uint32 = 0
 	bufProto := args[0]
 	l := uint32(len(bufProto))
@@ -208,8 +223,9 @@ func (p *MsgParser) WritePacket(conn *TCPConn, args ...[]byte) error {
 	for i := 1; i < len(args); i++ {
 		msgLen += uint32(len(args[i]))
 	}
-	// write proto
-	msg := make([]byte, msgLen+l+uint32(p.lenMsgLen))
+	//msgLen包含了协议的1字节长度
+	msgLen++
+	msg := make([]byte, msgLen+uint32(p.lenMsgLen))
 	copy(msg, bufProto)
 	// write len
 	switch p.lenMsgLen {
@@ -235,5 +251,6 @@ func (p *MsgParser) WritePacket(conn *TCPConn, args ...[]byte) error {
 		l += uint32(len(args[i]))
 	}
 	conn.Write(msg)
+	//fmt.Printf("WritePacket: %x", msg)
 	return nil
 }

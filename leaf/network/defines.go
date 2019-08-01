@@ -1,5 +1,5 @@
 package network
 
 const (
-	LittleEndian = false
+	LittleEndian = true
 )

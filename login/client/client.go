@@ -10,6 +10,7 @@ import (
 
 import (
 	. "server/common"
+	. "server/msg/protocol"
 )
 
 func (c *LoginClient) ID() int {
@@ -103,14 +104,16 @@ func createPlayer(acct string) int {
 func OnHello(agent gate.Agent) {
 	client := GetLoginClient(agent.RemoteAddr().String())
 	if client == nil {
+		agent.Destroy()
 		return
 	}
 	client.helloSuccess = true
 }
 
-func OnIdentity(agent gate.Agent) {
+func OnIdentity(agent gate.Agent, p *C2GSIdentity) {
 	client := GetLoginClient(agent.RemoteAddr().String())
 	if client == nil {
+		agent.Destroy()
 		return
 	}
 	client.identitySuccess = true
@@ -120,6 +123,7 @@ func OnIdentity(agent gate.Agent) {
 func ClientLogin(acct string, pwd string, agent gate.Agent) *LoginClient {
 	client := GetLoginClient(agent.RemoteAddr().String())
 	if client == nil {
+		LogError("%s try login but client is dead", agent.RemoteAddr().String())
 		return nil
 	}
 	if !client.helloSuccess {
@@ -149,12 +153,17 @@ func ClientLogin(acct string, pwd string, agent gate.Agent) *LoginClient {
 			LogError("regist %s error: %v", acct, err)
 			return nil
 		}
+		client.authSuccess = true
 	} else { //验证
 		if item.Password != pwd {
-			return nil
+			client.authSuccess = false
+		} else {
+			client.authSuccess = true
 		}
 	}
-	client.authSuccess = true
+	if !client.authSuccess {
+		return client
+	}
 
 	pid := 0
 	//需要创建新角色

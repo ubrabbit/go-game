@@ -15,6 +15,7 @@ var Server struct {
 	TCPAddr      string
 	MaxConnNum   int
 	ConsolePort  int
+	PprofPort    int
 	ProfilePath  string
 	ServerNum    int
 	DatabaseAddr string

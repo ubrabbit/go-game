@@ -41,7 +41,8 @@ func UnpackProto(conn net.Conn) (uint8, []byte, error) {
 		return 0, nil, err
 	}
 
-	// data
+	//dataLen 包含了1字节协议长度
+	dataLen--
 	msgData := make([]byte, int(dataLen))
 	if _, err := io.ReadFull(conn, msgData); err != nil {
 		return 0, nil, err
@@ -53,6 +54,8 @@ func PacketProto(proto uint8, msgData []byte) []byte {
 	size := len(msgData)
 	msg := make([]byte, size+packetHeaderSize)
 	msg[0] = byte(proto)
+	//size 包含了1字节协议长度
+	size++
 	if LittleEndian {
 		binary.LittleEndian.PutUint16(msg[1:], uint16(size))
 	} else {
@@ -114,10 +117,11 @@ func PacketInt(to []byte, value int, size int) []byte {
 	oldSize := len(to)
 	if cap(to) < len(to)+len(buf) {
 		newSize := len(to) + len(buf)
-		newBuf = make([]byte, newSize)
+		newBuf = make([]byte, oldSize, newSize*2)
 		copy(newBuf, to)
 	}
-	copy(newBuf[oldSize:], buf)
+	//copy(newBuf[oldSize:], buf)
+	newBuf = append(newBuf, buf...)
 	return newBuf
 }
 
@@ -173,17 +177,18 @@ func UnpackInt(from []byte, size int) (int, []byte) {
 
 func PacketBytes(to []byte, from []byte, size int) []byte {
 	newBuf := to
-	oldSize := len(to)
 	if size <= 0 {
 		size = len(from)
 	}
+	oldSize := len(to)
 	newSize := len(to) + int(size)
 	if cap(to) < newSize {
 		newSize := newSize
-		newBuf = make([]byte, newSize)
+		newBuf = make([]byte, oldSize, newSize*2)
 		copy(newBuf, to)
 	}
-	copy(newBuf[oldSize:], from[:size])
+	//copy(newBuf[oldSize:], from[:size])
+	newBuf = append(newBuf, from[:size]...)
 	return newBuf
 }
 

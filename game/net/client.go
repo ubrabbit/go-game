@@ -45,7 +45,7 @@ func (c *NetClient) Repr() string {
 }
 
 func (c *NetClient) Close() {
-	c.agent.Close()
+	c.agent.Destroy()
 }
 
 func (c *NetClient) OnConnect() {}

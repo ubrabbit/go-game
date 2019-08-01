@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	constLoginNum = 5000
+	constLoginNum = 1000
 )
 
 func TestLoginMany() {

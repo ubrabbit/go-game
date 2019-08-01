@@ -34,6 +34,7 @@ func NewClient() *Client {
 
 func (c *Client) UnpackProto() (uint8, []byte, error) {
 	proto, msgData, err := UnpackProto(c.Conn)
+	//LogInfo("UnpackProto: %d %x", proto, msgData)
 	return proto, msgData, err
 }
 
@@ -42,6 +43,17 @@ func (c *Client) SendProto(proto uint8) {
 	msg := PacketProto(proto, c.SendData)
 	//LogInfo("SendProto: %v", msg)
 	conn.Write(msg)
+}
+
+func (c *Client) GS2CHelo() {
+	proto, msg, err := c.UnpackProto()
+	CheckPanic(err)
+
+	p := &GS2CHello{}
+	p.UnpackData(msg)
+	if proto != p.Protocol() || p.Seed != helloSeed {
+		LogPanic("GS2CHelo Fail: %d %v %v", proto, msg, err)
+	}
 }
 
 func (c *Client) C2GSEcho(v1, v2, v3, v4 int, s string, b []byte) {
@@ -84,6 +96,7 @@ func (c *Client) TestEcho(clientCount int, loopCount int) {
 			str := FormatString("string_%d", k)
 			b := bytes.NewBufferString(FormatString("bytes_%d", k)).Bytes()
 			c := NewClient()
+			c.GS2CHelo()
 			for j := 0; j < loopCount; j++ {
 				v1, v2, v3, v4, v5, v6 := k, k+1, k*2, k*4, str, b
 				v1 = v1 % math.MaxUint8

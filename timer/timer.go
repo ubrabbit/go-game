@@ -64,6 +64,9 @@ func startTimer(mod *TimerModule, c *TimerObject, key string, timeout int, f *Fu
 	if ok {
 		i2.Stop()
 	}
+	if timeout <= 0 {
+		timeout = 1
+	}
 	i := &TimerItem{
 		ID:       NewObjectID(),
 		Key:      key,
